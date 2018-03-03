@@ -1,0 +1,109 @@
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+
+data(Boston)
+index <- sample(nrow(Boston),nrow(Boston)*0.90)
+boston.train <- Boston[index,]
+boston.test <- Boston[-index,]
+
+## r part tree
+boston.rpart <- rpart(formula = medv ~ ., data = boston.train)
+plot(boston.rpart)
+prp(boston.rpart, digits = 4, extra = 1)
+
+
+## OOS pred
+boston.test.pred.tree = predict(boston.rpart, newdata=boston.test)
+
+## MSE
+mean((boston.test$medv -boston.test.pred.tree)^2)
+
+boston.lm<- lm(medv~., data = boston.train) 
+  boston.train.pred.lm<- 
+  boston.test.pred.lm<- predict(boston.lm, newdata= boston.test)
+  MSPE.lm<- mean((boston.test$medv -boston.test.pred.lm)^2)
+  8             19.925899 27.1
+  
+## classification
+  credit.data <- read.csv("http://homepages.uc.edu/~lis6/DataMining/Data/credit_default.csv", header=T)
+  # rename
+  library(dplyr)
+  credit.data<- rename(credit.data, default=default.payment.next.month)
+  
+  # convert categorical data to factor
+  credit.data$SEX<- as.factor(credit.data$SEX)
+  credit.data$EDUCATION<- as.factor(credit.data$EDUCATION)
+  credit.data$MARRIAGE<- as.factor(credit.data$MARRIAGE)
+  
+  # random splitting
+  index <- sample(nrow(credit.data),nrow(credit.data)*0.80)
+  credit.train = credit.data[index,]
+  credit.test = credit.data[-index,]
+  
+  ## fitting a tree on whole model
+  credit.rpart0 <- rpart(formula = default ~ ., data = credit.train, method = "class")
+  pred0<- predict(credit.rpart0, type="class")
+  table(credit.train$default, pred0, dnn = c("True", "Pred"))
+  
+  credit.rpart <- rpart(formula = default ~ . , data = credit.train, method = "class", parms = list(loss=matrix(c(0,5,1,0), nrow = 2)))
+  
+  ## tree
+  prp(credit.rpart, extra = 1)
+v <- predict(credit.rpart,type="class")  
+  a<- data.frame(predicted =predict(credit.rpart,type="class"),actual = credit.train$default,PAY_0 = credit.train$PAY_0,stringsAsFactors = FALSE)
+nrow(a["PAY_0" >= 0.5])
+head(a)  
+class(a$predicted)
+
+
+## confusion matrix
+pred0<- predict(credit.rpart0, type="class")
+table(credit.train$default, pred0, dnn = c("True", "Pred"))
+
+## define cost function
+cost <- function(r, pi){
+  weight1 = 5
+  weight0 = 1
+  c1 = (r==1)&(pi==0) #logical vector - true if actual 1 but predict 0
+  c0 = (r==0)&(pi==1) #logical vector - true if actual 0 but predict 1
+  return(mean(weight1*c1+weight0*c0))
+}
+
+credit.train.pred.tree1<- predict(credit.rpart, type = "class")
+credit.test.pred.tree1<- predict(credit.rpart, newdata = credit.test)
+cost(credit.train$default,credit.train.pred.tree1)
+
+
+## comparison with logistoc regression
+#Fit logistic regression model
+credit.glm<- glm(default~., data = credit.train, family=binomial)
+#Get binary prediction
+credit.test.pred.glm<- as.numeric(predict(credit.glm, credit.test, type="response")>0.21)
+#Calculate cost using test set
+cost(credit.test$default,credit.test.pred.glm)
+
+credit.test.prob.rpart<- predict(credit.rpart,credit.test, type="prob")
+pred = prediction(credit.test.prob.rpart[,2], credit.test$default) 
+perf = performance(pred, "tpr", "fpr")
+plot(perf, colorize=TRUE)
+
+#Get the AUC
+unlist(slot(performance(pred, "auc"), "y.values"))
+
+#### pruning
+boston.largetree <- rpart(formula = medv ~ ., data = boston.train, cp = 0.001)
+prp(boston.largetree)
+plotcp(boston.largetree)
+
+# size of table
+class(printcp(boston.largetree))
+a<- printcp(boston.largetree)
+a[which(a[,"xerror"] == min(a[,"xerror"])),]
+a[which(a[,"nsplit"] == 10),1]
+class(a[,"nsplit"])
+
+## prune a tree
+a1<- prune(boston.largetree, cp = a[which(a[,"nsplit"] == 10),1])
+prp(a1)
